@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>统一用户管理系统 - 演示版</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.5.5/dist/index.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f0f4f8; }
+
+    .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #e8f0fe 0%, #d4e4fc 50%, #c3d9f7 100%); }
+    .login-card { width: 420px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); background: #fff; padding: 40px; }
+    .login-card.wide { width: 480px; }
+    .login-header { text-align: center; margin-bottom: 24px; }
+    .login-header h2 { font-size: 24px; color: #333; margin-bottom: 4px; }
+    .login-header p { font-size: 14px; color: #999; }
+
+    .app-layout { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 220px; background: #fff; color: #333; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid #e8ecf0; box-shadow: 2px 0 8px rgba(0,0,0,0.04); }
+    .logo-area { padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e8ecf0; font-size: 16px; font-weight: 600; color: #2563eb; }
+    .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #3b82f6, #2563eb); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; }
+    .main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .header { height: 56px; background: #fff; border-bottom: 1px solid #e8ecf0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .user-dropdown { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .content-area { flex: 1; overflow: auto; padding: 20px; }
+
+    .sidebar-menu .el-menu-item { color: #555 !important; }
+    .sidebar-menu .el-menu-item.is-active { color: #2563eb !important; background-color: #e8f0fe !important; }
+    .sidebar-menu .el-menu-item:hover { background-color: #f5f7fa !important; }
+    .sidebar-menu .el-menu-item.is-active::before { content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px; background:#2563eb; border-radius:0 2px 2px 0; }
+
+    .demo-banner { background: linear-gradient(90deg, #bfdbfe 0%, #93c5fd 50%, #60a5fa 100%); color: #1e3a5f; padding: 8px 20px; text-align: center; font-size: 13px; flex-shrink: 0; }
+
+    .table-wrap { background: #fff; border-radius: 8px; overflow-x: auto; }
+    .table-wrap .pagination-wrap { padding: 14px 20px; display: flex; justify-content: flex-end; border-top: 1px solid #f0f0f0; }
+
+    /* 纯 HTML 表格样式（替代 el-table） */
+    .plain-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .plain-table thead th { background: #fafafa; color: #333; font-weight: 600; padding: 12px 10px; border: 1px solid #dfe6ec; text-align: left; white-space: nowrap; }
+    .plain-table thead th.align-center { text-align: center; }
+    .plain-table tbody td { padding: 10px; border: 1px solid #dfe6ec; color: #606266; }
+    .plain-table tbody td.align-center { text-align: center; }
+    .plain-table--stripe tbody tr:nth-child(odd) { background: #fafafa; }
+    .plain-table tbody tr:hover { background: #f5f7fa; }
+  </style>
+</head>
+<body>
+<!-- 加载状态提示 -->
+<div id="load-status" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;color:#666;z-index:99999;">正在加载系统...</div>
+
+<div id="app">
+  <!-- ============ 登录页 ============ -->
+  <div v-if="currentView === 'login'" class="login-page">
+    <div class="login-card">
+      <div class="login-header">
+        <h2>统一用户管理系统</h2>
+        <p>请使用账号密码登录系统</p>
+      </div>
+      <el-form :model="loginForm" ref="loginFormRef" :rules="loginRules" label-position="top">
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large" @keyup.enter="handleLogin"/>
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" size="large" show-password @keyup.enter="handleLogin"/>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" size="large" style="width:100%" :loading="loginLoading" @click="handleLogin">登 录</el-button>
+        </el-form-item>
+        <div style="text-align:center;margin-top:12px">
+          <el-link type="primary" @click="currentView='register'">没有账号？立即注册</el-link>
+        </div>
+        <div style="text-align:center;margin-top:16px;padding-top:12px;border-top:1px dashed #eee">
+          <p style="font-size:12px;color:#999;margin-bottom:6px">演示模式 - 快速体验</p>
+          <el-button type="success" size="small" @click="demoLogin">一键登录（演示账号）</el-button>
+        </div>
+      </el-form>
+    </div>
+  </div>
+
+  <!-- ============ 注册页 ============ -->
+  <div v-else-if="currentView === 'register'" class="login-page">
+    <div class="login-card wide">
+      <div class="login-header">
+        <h2>注册账号</h2>
+        <p>创建统一用户管理系统账号</p>
+      </div>
+      <el-form :model="regForm" ref="regFormRef" :rules="regRules" label-position="top" size="large">
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="regForm.username" placeholder="请输入用户名（2-20位）"/>
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="regForm.password" type="password" placeholder="至少6位密码" show-password/>
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input v-model="regForm.confirmPassword" type="password" placeholder="再次输入密码" show-password @keyup.enter="handleRegister"/>
+        </el-form-item>
+        <el-form-item label="邮箱（选填）" prop="email">
+          <el-input v-model="regForm.email" placeholder="请输入邮箱"/>
+        </el-form-item>
+        <el-form-item label="手机号（选填）">
+          <el-input v-model="regForm.phone" placeholder="请输入手机号"/>
+        </el-form-item>
+        <el-form-item label="真实姓名（选填）">
+          <el-input v-model="regForm.realName" placeholder="请输入姓名"/>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" style="width:100%" :loading="regLoading" @click="handleRegister">注 册</el-button>
+        </el-form-item>
+        <div style="text-align:center;margin-top:12px">
+          <el-link type="primary" @click="currentView='login'">已有账号？返回登录</el-link>
+        </div>
+      </el-form>
+    </div>
+  </div>
+
+  <!-- ============ 主布局 ============ -->
+  <div v-else class="app-layout">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="logo-area">
+        <div class="logo-icon">&#9679;</div>
+        <span>统一用户管理系统</span>
+      </div>
+      <el-menu :default-active="activeTab" class="sidebar-menu"
+        background-color="transparent" style="border-right:none;padding-top:10px"
+        @select="handleMenuSelect">
+        <el-menu-item index="users">
+          <el-icon><User /></el-icon><span>用户管理</span>
+        </el-menu-item>
+        <el-menu-item index="roles">
+          <el-icon><Avatar /></el-icon><span>角色管理</span>
+        </el-menu-item>
+        <el-menu-item index="systems">
+          <el-icon><Monitor /></el-icon><span>系统配置</span>
+        </el-menu-item>
+      </el-menu>
+    </div>
+
+    <!-- 右侧主体 -->
+    <div class="main-container">
+      <div class="demo-banner">
+        演示模式 — 数据均为模拟数据，不会真实保存。点击右上角可退出登录。
+      </div>
+
+      <div class="header">
+        <div style="font-size:16px;font-weight:600;color:#333">管理中心</div>
+        <div class="header-right">
+          <el-dropdown trigger="click" @command="handleLogout">
+            <div class="user-dropdown">
+              <el-avatar :size="32" style="background-color:#409eff">{{ userInitial }}</el-avatar>
+              <span>{{ userName }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout" style="color:#f56c6c">
+                  <el-icon><SwitchButton /></el-icon>退出登录
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+
+      <!-- 内容区 -->
+      <div class="content-area">
+
+        <!-- ==================== 用户管理 ==================== -->
+        <div v-show="activeTab==='users'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-shrink:0">
+            <h2 style="font-size:20px;font-weight:600;color:#1a1a2e">子账户管理</h2>
+          </div>
+
+          <!-- 搜索区 -->
+          <div style="background:#fff;border-radius:8px;padding:14px 20px;margin-bottom:14px;flex-shrink:0">
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+              <el-button type="primary" @click="openUserDialog(false)"><el-icon><Plus /></el-icon> 新建账号</el-button>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="6">
+                <el-input v-model="userKeyword" placeholder="账号 / 名称" clearable @input="debounceFetchUsers" @clear="fetchUsers"/>
+              </el-col>
+              <el-col :span="4">
+                <el-select v-model="userRoleFilter" placeholder="用户角色" clearable @change="fetchUsers" style="width:100%">
+                  <el-option label="全部" value=""/>
+                  <el-option v-for="r in roleList" :key="r.id" :label="r.name" :value="r.id"/>
+                </el-select>
+              </el-col>
+              <el-col :span="4">
+                <el-select v-model="userFrozenFilter" placeholder="冻结状态" clearable @change="fetchUsers" style="width:100%">
+                  <el-option label="正常" value="0"/><el-option label="冻结" value="1"/>
+                </el-select>
+              </el-col>
+              <el-col :span="6">
+                <el-date-picker v-model="userDateRange" type="daterange" range-separator="至" start-placeholder="有效日期开始"
+                  end-placeholder="有效日期结束" value-format="YYYY-MM-DD" style="width:100%" @change="fetchUsers"/>
+              </el-col>
+            </el-row>
+          </div>
+
+          <!-- 用户表格 -->
+          <div class="table-wrap">
+            <table class="plain-table plain-table--stripe">
+              <thead>
+                <tr>
+                  <th style="min-width:100px">用户名</th>
+                  <th style="min-width:140px">用户角色</th>
+                  <th style="min-width:180px">邮箱</th>
+                  <th style="min-width:140px">手机号</th>
+                  <th style="min-width:90px" class="align-center">冻结状态</th>
+                  <th style="min-width:120px">有效期始</th>
+                  <th style="min-width:120px">有效期至</th>
+                  <th style="min-width:160px">创建时间</th>
+                  <th style="min-width:80px" class="align-center">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in userTableData" :key="row.id">
+                  <td>{{ row.username }}</td>
+                  <td>{{ (row.roleNames||[]).join('、') || '-' }}</td>
+                  <td>{{ row.email || '-' }}</td>
+                  <td>{{ row.phone || '-' }}</td>
+                  <td class="align-center">
+                    <el-tag :type="row.locked===1?'danger':'success'" size="small" effect="light">{{ row.locked===1?'冻结':'正常' }}</el-tag>
+                  </td>
+                  <td>{{ row.valid_from || '-' }}</td>
+                  <td>{{ row.valid_until || '-' }}</td>
+                  <td>{{ row.created_at || '-' }}</td>
+                  <td class="align-center"><el-link type="primary" @click="editUser(row)">编辑</el-link></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="pagination-wrap">
+              <el-pagination v-model:current-page="userPage" v-model:page-size="userPageSize" :total="userTotal"
+                layout="total, sizes, prev, pager, next, jumper" :page-sizes="[10,20,50]"
+                :pager-count="5" background @size-change="fetchUsers" @current-change="fetchUsers"/>
+            </div>
+          </div>
+
+          <!-- 用户编辑弹窗 -->
+          <el-dialog v-model="userDialogVisible" :title="isUserEdit?'账号编辑':'账号新建'" width="780px" destroy-on-close>
+            <el-form ref="userFormRef" :model="userForm" :rules="userFormRules" label-width="90px">
+              <el-collapse v-model="userCollapseActive">
+                <el-collapse-item title="基本参数" name="basic">
+                  <el-row :gutter="20">
+                    <el-col :span="8">
+                      <el-form-item label="账号" prop="username">
+                        <el-input v-model="userForm.username" placeholder="请输入账号" :disabled="isUserEdit"/>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="用户类型">
+                        <el-input value="平台用户" disabled/>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="* 名称" prop="realName">
+                        <el-input v-model="userForm.realName" placeholder="请输入名称"/>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="20">
+                    <el-col :span="8">
+                      <el-form-item label="邮箱"><el-input v-model="userForm.email" placeholder="请输入邮箱"/></el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="手机号码"><el-input v-model="userForm.phone" placeholder="请输入手机号"/></el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="锁定">
+                        <el-radio-group v-model="userForm.locked">
+                          <el-radio :value="false">否</el-radio><el-radio :value="true">是</el-radio>
+                        </el-radio-group>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="20">
+                    <el-col :span="8">
+                      <el-form-item label="* 有效日期">
+                        <el-date-picker v-model="userForm.validFrom" type="date" placeholder="请选择" value-format="YYYY-MM-DD" style="width:100%"/>
+                      </el-form-item>
+                    </el-col>
+                    <el-col :span="8">
+                      <el-form-item label="有效日期至">
+                        <el-date-picker v-model="userForm.validUntil" type="date" placeholder="请选择" value-format="YYYY-MM-DD" style="width:100%"/>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                  <el-row :gutter="20" v-if="!isUserEdit">
+                    <el-col :span="12">
+                      <el-form-item label="密码" prop="password">
+                        <el-input v-model="userForm.password" type="password" show-password placeholder="请输入密码（至少6位）"/>
+                      </el-form-item>
+                    </el-col>
+                  </el-row>
+                </el-collapse-item>
+                <el-collapse-item name="roles">
+                  <template #title><span style="color:#409eff;font-weight:500">分配角色</span></template>
+                  <div style="padding:10px 0">
+                    <el-checkbox-group v-model="userForm.roleIds">
+                      <div v-for="r in roleList" :key="r.id" style="display:inline-block;width:25%;margin-bottom:10px">
+                        <el-checkbox :label="r.id">{{ r.name }}</el-checkbox>
+                      </div>
+                    </el-checkbox-group>
+                    <div v-if="!roleList.length" style="color:#999">暂无角色</div>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </el-form>
+            <template #footer>
+              <div style="display:flex;justify-content:space-between;width:100%">
+                <div>
+                  <el-button v-if="isUserEdit" type="warning" plain @click="resetUserPwd">重置密码</el-button>
+                  <el-button v-if="isUserEdit" type="info" plain @click="openChangePwdDialog">修改密码</el-button>
+                </div>
+                <div>
+                  <el-button @click="userDialogVisible=false">取消</el-button>
+                  <el-button type="primary" @click="submitUserForm">保存</el-button>
+                </div>
+              </div>
+            </template>
+          </el-dialog>
+
+          <!-- 修改密码弹窗 -->
+          <el-dialog v-model="pwdDialogVisible" title="修改密码" width="420px" destroy-on-close>
+            <el-form :model="pwdForm" :rules="pwdRules" ref="pwdFormRef" label-width="90px">
+              <el-form-item label="新密码" prop="password">
+                <el-input v-model="pwdForm.password" type="password" show-password placeholder="请输入新密码(至少6位)"/>
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="pwdDialogVisible=false">取消</el-button>
+              <el-button type="primary" @click="submitChangePwd">确定</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
+        <!-- ==================== 角色管理 ==================== -->
+        <div v-show="activeTab==='roles'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-shrink:0">
+            <h2 style="font-size:20px;font-weight:600">角色管理</h2>
+            <el-button type="primary" @click="openRoleCreateDialog">创建角色</el-button>
+          </div>
+          <div style="display:flex;gap:16px;flex:1;min-height:0">
+            <!-- 角色列表 -->
+            <div style="width:320px;background:#fff;border-radius:8px;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0">
+              <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+                <el-input v-model="roleSearchKey" placeholder="编码/名称" clearable/>
+              </div>
+              <div style="flex:1;overflow-y:auto">
+                <div v-for="r in filteredRoles" :key="r.id"
+                  :style="{padding:'14px 20px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',
+                    backgroundColor:selectedRoleId===r.id?'#e8f4fd':'',transition:'background-color .2s'}"
+                  @click="selectRole(r)">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span :style="{fontWeight:500,color:selectedRoleId===r.id?'#409eff':'#333'}">{{ r.name }}</span>
+                    <el-tag type="success" size="small" effect="light">启用</el-tag>
+                  </div>
+                  <div style="font-size:12px;color:#999;margin-top:4px">{{ r.code }}</div>
+                </div>
+                <div v-if="!filteredRoles.length" style="text-align:center;padding:40px;color:#999">暂无角色</div>
+              </div>
+            </div>
+
+            <!-- 角色详情 -->
+            <div style="flex:1;background:#fff;border-radius:8px;padding:24px;overflow-y:auto" v-loading="roleDetailLoading">
+              <template v-if="selectedRole">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+                  <div>
+                    <h3 style="font-size:18px;margin-bottom:4px">{{ selectedRole.name }}</h3>
+                    <p style="color:#999;font-size:13px">{{ selectedRole.description || '暂无描述' }}</p>
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <el-button size="small" @click="editRoleInfo(selectedRole)">编辑信息</el-button>
+                    <el-button size="small" type="danger" plain @click="deleteRole(selectedRole)">删除</el-button>
+                  </div>
+                </div>
+
+                <!-- 功能权限 -->
+                <div style="margin-bottom:28px">
+                  <h4 style="font-size:15px;font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f0f0f0">功能权限</h4>
+                  <el-checkbox-group v-model="rolePermissions.functions">
+                    <el-checkbox label="user_manage">用户管理</el-checkbox>
+                    <el-checkbox label="role_manage" style="margin-left:20px">角色管理</el-checkbox>
+                    <el-checkbox label="system_manage" style="margin-left:20px">系统配置</el-checkbox>
+                  </el-checkbox-group>
+                </div>
+
+                <!-- 可访问系统 -->
+                <div>
+                  <h4 style="font-size:15px;font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f0f0f0">可访问系统</h4>
+                  <el-checkbox-group v-model="rolePermissions.subsystems">
+                    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+                      <el-checkbox v-for="s in enabledSubsystemList" :key="s.code" :label="s.code">
+                        {{ s.name }}
+                        <span style="color:#999;font-size:12px;margin-left:4px">({{ s.access_url }})</span>
+                      </el-checkbox>
+                    </div>
+                  </el-checkbox-group>
+                  <div v-if="!enabledSubsystemList.length" style="color:#999;font-size:13px;padding:10px 0">
+                    暂无启用的系统，请先在 <el-link type="primary" @click="activeTab='systems'">系统配置</el-link> 中添加并启用系统
+                  </div>
+                </div>
+
+                <div style="text-align:right;margin-top:32px;padding-top:16px;border-top:1px solid #f0f0f0">
+                  <el-button type="primary" @click="saveRolePermissions" :loading="savingRole">保存权限</el-button>
+                </div>
+              </template>
+              <div v-else style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:14px">
+                请选择一个角色查看/编辑权限
+              </div>
+            </div>
+          </div>
+
+          <!-- 创建/编辑角色弹窗 -->
+          <el-dialog v-model="roleFormDialogVisible" :title="isRoleEdit?'编辑角色':'创建角色'" width="520px" destroy-on-close>
+            <el-form ref="roleFormRef" :model="roleForm" :rules="roleFormRules" label-width="90px">
+              <el-form-item label="角色名称" prop="name">
+                <el-input v-model="roleForm.name" placeholder="请输入角色名称" maxlength="50" show-word-limit/>
+              </el-form-item>
+              <el-form-item label="角色编码" prop="code">
+                <el-input v-model="roleForm.code" placeholder="请输入角色编码（英文/数字/下划线）" :disabled="isRoleEdit" maxlength="50"/>
+              </el-form-item>
+              <el-form-item label="角色描述">
+                <el-input v-model="roleForm.description" type="textarea" :rows="3" placeholder="请输入角色描述（选填）" maxlength="200" show-word-limit/>
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="roleFormDialogVisible=false">取消</el-button>
+              <el-button type="primary" @click="submitRoleForm" :loading="roleFormLoading">确定</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
+        <!-- ==================== 系统配置 ==================== -->
+        <div v-show="activeTab==='systems'">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-shrink:0">
+            <h2 style="font-size:20px;font-weight:600">系统配置</h2>
+            <el-button type="primary" @click="openSystemDialog(false)"><el-icon><Plus /></el-icon> 添加系统</el-button>
+          </div>
+
+          <!-- 搜索筛选区域 -->
+          <div style="background:#fff;border-radius:8px;padding:14px 20px;margin-bottom:14px;flex-shrink:0">
+            <el-row :gutter="16">
+              <el-col :span="6">
+                <el-input v-model="systemKeyword" placeholder="请输入系统名称" clearable @input="fetchSystemList" @clear="fetchSystemList"/>
+              </el-col>
+              <el-col :span="4">
+                <el-select v-model="systemEnabledFilter" placeholder="是否启用" clearable @change="fetchSystemList" style="width:100%">
+                  <el-option label="启用" :value="true"/>
+                  <el-option label="禁用" :value="false"/>
+                </el-select>
+              </el-col>
+            </el-row>
+          </div>
+
+          <!-- 系统列表 -->
+          <div class="table-wrap">
+            <table class="plain-table plain-table--stripe">
+              <thead>
+                <tr>
+                  <th style="min-width:200px">系统名称</th>
+                  <th style="min-width:320px">系统链接</th>
+                  <th style="min-width:110px" class="align-center">是否启用</th>
+                  <th style="min-width:150px" class="align-center">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in systemTableData" :key="row.code">
+                  <td>{{ row.name }}</td>
+                  <td><a :href="row.access_url" target="_blank" style="color:#409eff;text-decoration:none">{{ row.access_url }}</a></td>
+                  <td class="align-center"><el-switch v-model="row.enabled" @change="toggleSystemEnabled(row)" /></td>
+                  <td class="align-center">
+                    <el-link type="primary" style="margin-right:10px" @click="editSystem(row)">编辑</el-link>
+                    <el-link type="danger" @click="deleteSystem(row)">删除</el-link>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!systemTableData.length" style="text-align:center;padding:60px;color:#999">
+              <el-empty description="暂无已配置的系统" :image-size="80"/>
+            </div>
+          </div>
+          </div>
+
+          <!-- 系统编辑弹窗 -->
+          <el-dialog v-model="systemDialogVisible" :title="isSystemEdit?'编辑系统':'添加系统'" width="520px" destroy-on-close>
+            <el-form ref="systemFormRef" :model="systemForm" :rules="systemFormRules" label-width="90px">
+              <el-form-item label="系统名称" prop="name">
+                <el-input v-model="systemForm.name" placeholder="请输入系统名称" maxlength="50"/>
+              </el-form-item>
+              <el-form-item label="系统编码" prop="code">
+                <el-input v-model="systemForm.code" placeholder="请输入系统编码（英文/数字/下划线）" :disabled="isSystemEdit" maxlength="50"/>
+              </el-form-item>
+              <el-form-item label="访问地址" prop="access_url">
+                <el-input v-model="systemForm.access_url" placeholder="请输入访问地址，如 https://example.com" maxlength="200"/>
+              </el-form-item>
+              <el-form-item label="系统描述">
+                <el-input v-model="systemForm.description" type="textarea" :rows="3" placeholder="请输入系统描述（选填）" maxlength="200" show-word-limit/>
+              </el-form-item>
+            </el-form>
+            <template #footer>
+              <el-button @click="systemDialogVisible=false">取消</el-button>
+              <el-button type="primary" @click="submitSystemForm" :loading="systemFormLoading">确定</el-button>
+            </template>
+          </el-dialog>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CDN 依赖：Vue 3.3.13 + Element Plus 2.5.5 + 图标（稳定验证版本组合） -->
+<script src="https://unpkg.com/vue@3.3.13/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@2.5.5/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/@element-plus/icons-vue@2.3.1/dist/index.iife.min.js"></script>
+
+<script>
+var loadStatus = document.getElementById('load-status')
+
+var _Vue = Vue
+var _createApp = _Vue.createApp
+var _ref = _Vue.ref
+var _reactive = _Vue.reactive
+var _computed = _Vue.computed
+var _ElMessage = ElementPlus.ElMessage
+var _ElMessageBox = ElementPlus.ElMessageBox
+
+// ==================== 模拟数据 ====================
+var MOCK_USERS = [
+  { id:1, username:'admin', real_name:'系统管理员', email:'admin@example.com', phone:'13800000001', user_type:'platform', locked:0, valid_from:'2024-01-01', valid_until:'2026-12-31', created_at:'2024-01-01 10:00:00', roleIds:[1], roleNames:['超级管理员'] },
+  { id:2, username:'zhangsan', real_name:'张三', email:'zhangsan@example.com', phone:'13800000002', user_type:'platform', locked:0, valid_from:'2024-03-01', valid_until:'2025-12-31', created_at:'2024-03-01 09:30:00', roleIds:[2], roleNames:['普通用户'] },
+  { id:3, username:'lisi', real_name:'李四', email:'lisi@example.com', phone:'13800000003', user_type:'platform', locked:0, valid_from:'2024-06-01', valid_until:'2025-06-30', created_at:'2024-06-01 14:20:00', roleIds:[2,3], roleNames:['普通用户','审计员'] },
+  { id:4, username:'wangwu', real_name:'王五', email:'wangwu@example.com', phone:'13800000004', user_type:'platform', locked:1, valid_from:'2024-01-15', valid_until:'2025-01-15', created_at:'2024-01-15 11:00:00', roleIds:[2], roleNames:['普通用户'] },
+  { id:5, username:'zhaoliu', real_name:'赵六', email:'zhaoliu@example.com', phone:'13800000005', user_type:'platform', locked:0, valid_from:'2024-09-01', valid_until:'2026-09-01', created_at:'2024-09-01 08:45:00', roleIds:[2,4], roleNames:['普通用户','运营管理'] },
+  { id:6, username:'sunqi', real_name:'孙七', email:'sunqi@example.com', phone:'13800000006', user_type:'platform', locked:0, valid_from:'2024-04-01', valid_until:'2026-04-01', created_at:'2024-04-01 16:10:00', roleIds:[3], roleNames:['审计员'] },
+  { id:7, username:'zhouba', real_name:'周八', email:'zhouba@example.com', phone:'13800000007', user_type:'platform', locked:1, valid_from:'2023-12-01', valid_until:'2024-12-01', created_at:'2023-12-01 10:30:00', roleIds:[2], roleNames:['普通用户'] },
+  { id:8, username:'wujiu', real_name:'吴九', email:'wujiu@example.com', phone:'13800000008', user_type:'platform', locked:0, valid_from:'2025-01-01', valid_until:'2027-01-01', created_at:'2025-01-01 00:00:00', roleIds:[1,2], roleNames:['超级管理员','普通用户'] },
+  { id:9, username:'zhengshi', real_name:'郑十', email:'zhengshi@example.com', phone:'13800000009', user_type:'platform', locked:0, valid_from:'2024-07-15', valid_until:'2026-07-15', created_at:'2024-07-15 13:00:00', roleIds:[2], roleNames:['普通用户'] },
+  { id:10, username:'chenyi', real_name:'陈一', email:'chenyi@example.com', phone:'13800000010', user_type:'platform', locked:0, valid_from:'2024-11-01', valid_until:'2026-11-01', created_at:'2024-11-01 09:00:00', roleIds:[4], roleNames:['运营管理'] },
+  { id:11, username:'liuer', real_name:'刘二', email:'liuer@example.com', phone:'13800000011', user_type:'platform', locked:0, valid_from:'2025-02-01', valid_until:'2027-02-01', created_at:'2025-02-01 10:00:00', roleIds:[2,3], roleNames:['普通用户','审计员'] },
+  { id:12, username:'huangsan', real_name:'黄三', email:'huangsan@example.com', phone:'13800000012', user_type:'platform', locked:1, valid_from:'2024-05-01', valid_until:'2025-05-01', created_at:'2024-05-01 15:30:00', roleIds:[2], roleNames:['普通用户'] }
+]
+
+var MOCK_ROLES = [
+  { id:1, name:'超级管理员', code:'super_admin', description:'拥有系统所有权限，可管理用户、角色和系统配置', status:1, permissions:{ functions:['user_manage','role_manage','system_manage'], subsystems:['crm','erp','oa'] } },
+  { id:2, name:'普通用户', code:'normal_user', description:'基础访问权限，可查看和管理个人相关信息', status:1, permissions:{ functions:['user_manage'], subsystems:['oa'] } },
+  { id:3, name:'审计员', code:'auditor', description:'查看和审计权限，可浏览系统日志和操作记录', status:1, permissions:{ functions:[], subsystems:['crm','erp','oa'] } },
+  { id:4, name:'运营管理', code:'operation_manager', description:'运营后台管理权限，负责日常运营数据管理', status:1, permissions:{ functions:['user_manage'], subsystems:['crm','oa'] } }
+]
+
+var MOCK_SUBSYSTEMS = [
+  { code:'crm', name:'CRM客户管理系统', access_url:'https://crm.example.com', description:'客户关系管理，销售线索跟进与客户服务', enabled:true },
+  { code:'erp', name:'ERP企业资源计划', access_url:'https://erp.example.com', description:'企业资源计划管理，采购库存财务一体化', enabled:true },
+  { code:'oa', name:'OA办公自动化', access_url:'https://oa.example.com', description:'日常办公审批流程、公文管理、会议管理', enabled:true }
+]
+
+function cloneJson(obj) { return JSON.parse(JSON.stringify(obj)) }
+
+var storageKey = 'demo_user_mgmt_v4'
+var store = cloneJson(MOCK_USERS) // placeholder, overwritten in setup
+
+// ==================== Vue App ====================
+var app = _createApp({
+  setup: function() {
+    // load/save store
+    function loadStore() {
+      try { var s = localStorage.getItem(storageKey); if (s) return JSON.parse(s) } catch(e) {}
+      return { users: cloneJson(MOCK_USERS), roles: cloneJson(MOCK_ROLES), subsystems: cloneJson(MOCK_SUBSYSTEMS) }
+    }
+    var storeData = _reactive(loadStore())
+    store = storeData
+    function saveStore() { localStorage.setItem(storageKey, JSON.stringify(storeData)) }
+
+    var currentView = _ref('login')
+    var activeTab = _ref('users')
+    var userInfo = _ref({ username:'admin', realName:'系统管理员' })
+    var userName = _computed(function() { return userInfo.value.realName || userInfo.value.username || '用户' })
+    var userInitial = _computed(function() { return userName.value.charAt(0) })
+
+    // --- 登录 ---
+    var loginForm = _reactive({ username:'', password:'' })
+    var loginFormRef = _ref(null)
+    var loginLoading = _ref(false)
+    var loginRules = {
+      username: [{ required:true, message:'请输入用户名', trigger:'blur' }],
+      password: [{ required:true, message:'请输入密码', trigger:'blur' }]
+    }
+    function demoLogin() { loginForm.username='admin'; loginForm.password='admin123'; handleLogin() }
+    async function handleLogin() {
+      var vf = loginFormRef.value
+      if (!vf) return
+      try { await vf.validate() } catch(e) { return }
+      loginLoading.value = true
+      await new Promise(function(r){ setTimeout(r,500) })
+      var found = storeData.users.find(function(u){ return u.username===loginForm.username })
+      if (found) {
+        userInfo.value = { username:found.username, realName:found.real_name }
+      } else {
+        var nu = {
+          id: Math.max.apply(null, storeData.users.map(function(u){ return u.id })) + 1,
+          username: loginForm.username, real_name: loginForm.username,
+          email:'', phone:'', user_type:'platform', locked:0,
+          valid_from: new Date().toISOString().slice(0,10), valid_until:'2027-12-31',
+          created_at: new Date().toISOString().replace('T',' ').slice(0,19),
+          roleIds:[2], roleNames:['普通用户']
+        }
+        storeData.users.push(nu)
+        saveStore()
+        userInfo.value = { username:nu.username, realName:nu.real_name }
+      }
+      currentView.value = 'main'
+      fetchUsers()
+      fetchSystemList()
+      loginLoading.value = false
+    }
+
+    // --- 注册 ---
+    var regForm = _reactive({ username:'', password:'', confirmPassword:'', email:'', phone:'', realName:'' })
+    var regFormRef = _ref(null)
+    var regLoading = _ref(false)
+    var regRules = {
+      username: [{ required:true, message:'请输入用户名', trigger:'blur' }, { min:2, max:20, message:'2-20位', trigger:'blur' }],
+      password: [{ required:true, message:'请输入密码', trigger:'blur' }, { min:6, message:'至少6位', trigger:'blur' }],
+      confirmPassword: [{ required:true, message:'请确认密码', trigger:'blur' },
+        { validator: function(r,v,cb){ cb(v !== regForm.password ? new Error('两次密码不一致') : undefined) }, trigger:'blur' }]
+    }
+    async function handleRegister() {
+      var vf = regFormRef.value
+      if (!vf) return
+      try { await vf.validate() } catch(e) { return }
+      regLoading.value = true
+      await new Promise(function(r){ setTimeout(r,400) })
+      if (storeData.users.find(function(u){ return u.username===regForm.username })) {
+        _ElMessage.error('用户名已存在'); regLoading.value = false; return
+      }
+      storeData.users.push({
+        id:Math.max.apply(null,storeData.users.map(function(u){ return u.id }))+1,
+        username:regForm.username, real_name:regForm.realName||regForm.username,
+        email:regForm.email, phone:regForm.phone, user_type:'platform', locked:0,
+        valid_from:new Date().toISOString().slice(0,10), valid_until:'2027-12-31',
+        created_at:new Date().toISOString().replace('T',' ').slice(0,19),
+        roleIds:[2], roleNames:['普通用户']
+      })
+      saveStore()
+      _ElMessage.success('注册成功，请登录')
+      currentView.value = 'login'
+      regLoading.value = false
+    }
+
+    // --- 退出 ---
+    function handleLogout(cmd) {
+      if (cmd !== 'logout') return
+      _ElMessageBox.confirm('确定要退出登录吗？','提示',{ type:'warning' }).then(function(){
+        currentView.value = 'login'
+        _ElMessage.success('已退出登录')
+      }).catch(function(){})
+    }
+    function handleMenuSelect(idx) { activeTab.value = idx }
+
+    // --- 用户管理 ---
+    var userTableData = _ref([])
+    var userLoading = _ref(false)
+    var userKeyword = _ref('')
+    var userRoleFilter = _ref('')
+    var userFrozenFilter = _ref('')
+    var userDateRange = _ref(null)
+    var userPage = _ref(1)
+    var userPageSize = _ref(10)
+    var userTotal = _ref(0)
+    var roleList = _computed(function(){ return storeData.roles })
+    var dt = null
+    function debounceFetchUsers() { clearTimeout(dt); dt = setTimeout(fetchUsers,300) }
+
+    function fetchUsers() {
+      userLoading.value = true
+      setTimeout(function(){
+        var list = storeData.users.slice()
+        if (userKeyword.value) {
+          var kw = userKeyword.value.toLowerCase()
+          list = list.filter(function(u){ return u.username.includes(kw) || u.real_name.includes(kw) || (u.email||'').includes(kw) })
+        }
+        if (userRoleFilter.value) list = list.filter(function(u){ return (u.roleIds||[]).indexOf(Number(userRoleFilter.value)) >= 0 })
+        if (userFrozenFilter.value) list = list.filter(function(u){ return u.locked === Number(userFrozenFilter.value) })
+        if (userDateRange.value && userDateRange.value.length === 2) {
+          var from = userDateRange.value[0], to = userDateRange.value[1]
+          list = list.filter(function(u){ if(!u.valid_from||!u.valid_until)return true; return u.valid_from<=to && u.valid_until>=from })
+        }
+        userTotal.value = list.length
+        var start = (userPage.value-1)*userPageSize.value
+        userTableData.value = list.slice(start, start+userPageSize.value)
+        userLoading.value = false
+      },200)
+    }
+
+    var userDialogVisible = _ref(false)
+    var isUserEdit = _ref(false)
+    var userFormRef = _ref(null)
+    var userCollapseActive = _ref(['basic','roles'])
+    var userForm = _reactive({ id:null, username:'', password:'', email:'', phone:'', realName:'', userType:'platform', validFrom:'', validUntil:'', locked:false, roleIds:[] })
+    var userFormRules = {
+      username: [{ required:true, message:'请输入账号', trigger:'blur' }],
+      password: [{ required:true, message:'请输入密码', trigger:'blur' }, { min:6, message:'至少6位', trigger:'blur' }],
+      realName: [{ required:true, message:'请输入名称', trigger:'blur' }]
+    }
+    function resetUserForm() {
+      Object.assign(userForm, { id:null, username:'', password:'', email:'', phone:'', realName:'', userType:'platform', validFrom:'', validUntil:'', locked:false, roleIds:[] })
+    }
+    function openUserDialog(isEdit) { isUserEdit.value = isEdit; if (!isEdit) resetUserForm(); userDialogVisible.value = true }
+    function editUser(row) {
+      var u = storeData.users.find(function(x){ return x.id===row.id })
+      if (!u) return
+      Object.assign(userForm, {
+        id:u.id, username:u.username, email:u.email||'', phone:u.phone||'',
+        realName:u.real_name||'', userType:u.user_type||'platform',
+        validFrom:u.valid_from||'', validUntil:u.valid_until||'',
+        locked:u.locked===1, roleIds:(u.roleIds||[]).slice()
+      })
+      openUserDialog(true)
+    }
+    function submitUserForm() {
+      if (!userForm.username || (!isUserEdit.value && !userForm.password)) { _ElMessage.warning('请填写必要信息'); return }
+      if (isUserEdit.value) {
+        var idx = storeData.users.findIndex(function(u){ return u.id===userForm.id })
+        if (idx>=0) {
+          var rids = userForm.roleIds || []
+          storeData.users[idx] = Object.assign({}, storeData.users[idx], {
+            email:userForm.email, phone:userForm.phone, real_name:userForm.realName,
+            valid_from:userForm.validFrom, valid_until:userForm.validUntil,
+            locked: userForm.locked?1:0,
+            roleIds: rids,
+            roleNames: rids.map(function(rid){ var r=storeData.roles.find(function(x){ return x.id===rid }); return r?r.name:'' }).filter(Boolean)
+          })
+          saveStore()
+          _ElMessage.success('更新成功')
+        }
+      } else {
+        var rids2 = userForm.roleIds || []
+        storeData.users.push({
+          id:Math.max.apply(null,storeData.users.map(function(u){ return u.id }))+1,
+          username:userForm.username, real_name:userForm.realName||userForm.username,
+          email:userForm.email, phone:userForm.phone, user_type:'platform',
+          valid_from:userForm.validFrom||new Date().toISOString().slice(0,10),
+          valid_until:userForm.validUntil||'2027-12-31',
+          created_at:new Date().toISOString().replace('T',' ').slice(0,19),
+          locked:userForm.locked?1:0,
+          roleIds:rids2,
+          roleNames:rids2.map(function(rid){ var r=storeData.roles.find(function(x){ return x.id===rid }); return r?r.name:'' }).filter(Boolean)
+        })
+        saveStore()
+        _ElMessage.success('创建成功')
+      }
+      userDialogVisible.value = false
+      fetchUsers()
+    }
+    function resetUserPwd() {
+      _ElMessageBox.confirm('确定要将该用户的密码重置为默认密码 123456 吗？','重置密码',{ type:'warning' })
+        .then(function(){ _ElMessage.success('已重置为 123456（演示模式）') }).catch(function(){})
+    }
+    var pwdDialogVisible = _ref(false)
+    var pwdFormRef = _ref(null)
+    var pwdForm = _reactive({ password:'' })
+    var pwdRules = { password:[{ required:true, message:'请输入新密码', trigger:'blur' }, { min:6, message:'至少6位', trigger:'blur' }] }
+    function openChangePwdDialog() { pwdForm.password=''; pwdDialogVisible.value=true }
+    async function submitChangePwd() {
+      var vf = pwdFormRef.value
+      if (!vf) return
+      try { await vf.validate() } catch(e) { return }
+      _ElMessage.success('密码修改成功（演示模式）')
+      pwdDialogVisible.value = false
+    }
+
+    // --- 角色管理 ---
+    var roleSearchKey = _ref('')
+    var filteredRoles = _computed(function(){
+      if (!roleSearchKey.value) return storeData.roles
+      var k = roleSearchKey.value.toLowerCase()
+      return storeData.roles.filter(function(r){ return r.name.includes(k) || r.code.includes(k) })
+    })
+    var selectedRoleId = _ref(null)
+    var selectedRole = _ref(null)
+    var roleDetailLoading = _ref(false)
+    var rolePermissions = _ref({ functions:[], subsystems:[] })
+    var enabledSubsystemList = _computed(function(){ return storeData.subsystems.filter(function(s){ return s.enabled!==false }) })
+    var savingRole = _ref(false)
+
+    function selectRole(role) {
+      if (selectedRoleId.value === role.id) return
+      selectedRoleId.value = role.id
+      roleDetailLoading.value = true
+      setTimeout(function(){
+        var r = storeData.roles.find(function(x){ return x.id===role.id })
+        selectedRole.value = r ? cloneJson(r) : null
+        if (r) rolePermissions.value = { functions:(r.permissions?.functions||[]).slice(), subsystems:(r.permissions?.subsystems||[]).slice() }
+        roleDetailLoading.value = false
+      },200)
+    }
+    function saveRolePermissions() {
+      savingRole.value = true
+      setTimeout(function(){
+        var r = storeData.roles.find(function(x){ return x.id===selectedRoleId.value })
+        if (r) {
+          r.permissions = { functions:rolePermissions.value.functions.slice(), subsystems:rolePermissions.value.subsystems.slice() }
+          saveStore()
+          _ElMessage.success('权限保存成功')
+        }
+        savingRole.value = false
+      },300)
+    }
+
+    var roleFormDialogVisible = _ref(false)
+    var isRoleEdit = _ref(false)
+    var roleFormRef = _ref(null)
+    var roleFormLoading = _ref(false)
+    var roleForm = _reactive({ id:null, name:'', code:'', description:'' })
+    var roleFormRules = {
+      name:[{ required:true, message:'请输入角色名称', trigger:'blur' }],
+      code:[{ required:true, message:'请输入角色编码', trigger:'blur' },
+        { pattern:/^[a-zA-Z][a-zA-Z0-9_]*$/, message:'编码需以字母开头，仅含字母/数字/下划线', trigger:'blur' }]
+    }
+    function openRoleCreateDialog() { isRoleEdit.value=false; Object.assign(roleForm,{ id:null, name:'', code:'', description:'' }); roleFormDialogVisible.value=true }
+    function editRoleInfo(role) { isRoleEdit.value=true; Object.assign(roleForm,{ id:role.id, name:role.name, code:role.code, description:role.description||'' }); roleFormDialogVisible.value=true }
+    async function submitRoleForm() {
+      var vf = roleFormRef.value
+      if (!vf) return
+      try { await vf.validate() } catch(e) { return }
+      roleFormLoading.value = true
+      await new Promise(function(r){ setTimeout(r,300) })
+      if (isRoleEdit.value) {
+        var r = storeData.roles.find(function(x){ return x.id===roleForm.id })
+        if (r) {
+          r.name=roleForm.name; r.description=roleForm.description
+          storeData.users.forEach(function(u){
+            var idx = (u.roleIds||[]).indexOf(r.id)
+            if (idx>=0 && u.roleNames) u.roleNames[idx] = r.name
+          })
+          saveStore()
+          _ElMessage.success('角色信息更新成功')
+          selectedRole.value = cloneJson(r)
+        }
+      } else {
+        if (storeData.roles.find(function(x){ return x.code===roleForm.code })) {
+          _ElMessage.error('角色编码已存在'); roleFormLoading.value=false; return
+        }
+        var nr = { id:Math.max.apply(null,storeData.roles.map(function(x){ return x.id }))+1, name:roleForm.name, code:roleForm.code, description:roleForm.description, status:1, permissions:{ functions:[], subsystems:[] } }
+        storeData.roles.push(nr); saveStore()
+        _ElMessage.success('角色创建成功')
+        selectedRoleId.value=nr.id; selectedRole.value=cloneJson(nr); rolePermissions.value={ functions:[], subsystems:[] }
+      }
+      roleFormDialogVisible.value=false; roleFormLoading.value=false
+    }
+    function deleteRole(role) {
+      _ElMessageBox.confirm('确定要删除角色"'+role.name+'"吗？删除后关联用户的该角色也将被移除。','删除角色',{
+        confirmButtonText:'确定删除', cancelButtonText:'取消', type:'warning'
+      }).then(function(){
+        var idx = storeData.roles.findIndex(function(r){ return r.id===role.id })
+        if (idx>=0) storeData.roles.splice(idx,1)
+        storeData.users.forEach(function(u){
+          var ridx = (u.roleIds||[]).indexOf(role.id)
+          if (ridx>=0) { u.roleIds.splice(ridx,1); if (u.roleNames) u.roleNames.splice(ridx,1) }
+        })
+        saveStore()
+        if (selectedRoleId.value===role.id) { selectedRoleId.value=null; selectedRole.value=null }
+        _ElMessage.success('角色已删除')
+      }).catch(function(){})
+    }
+
+    // --- 系统配置 ---
+    var systemTableData = _ref([])
+    var systemKeyword = _ref('')
+    var systemEnabledFilter = _ref('')
+    var systemDialogVisible = _ref(false)
+    var isSystemEdit = _ref(false)
+    var systemFormRef = _ref(null)
+    var systemFormLoading = _ref(false)
+    var systemForm = _reactive({ code:'', name:'', access_url:'', description:'' })
+    var systemFormRules = {
+      name:[{ required:true, message:'请输入系统名称', trigger:'blur' }],
+      code:[{ required:true, message:'请输入系统编码', trigger:'blur' },
+        { pattern:/^[a-zA-Z][a-zA-Z0-9_]*$/, message:'编码需以字母开头，仅含字母/数字/下划线', trigger:'blur' }],
+      access_url:[{ required:true, message:'请输入访问地址', trigger:'blur' }]
+    }
+    function fetchSystemList() {
+      var list = storeData.subsystems.slice()
+      if (systemKeyword.value) {
+        var kw2 = systemKeyword.value.toLowerCase()
+        list = list.filter(function(s){ return s.name.toLowerCase().includes(kw2) })
+      }
+      if (systemEnabledFilter.value!=='' && systemEnabledFilter.value!==null && systemEnabledFilter.value!==undefined) {
+        list = list.filter(function(s){ return (s.enabled!==false)===systemEnabledFilter.value })
+      }
+      systemTableData.value = list
+    }
+    function toggleSystemEnabled(row) {
+      var s = storeData.subsystems.find(function(x){ return x.code===row.code })
+      if (s) { s.enabled=row.enabled; saveStore(); _ElMessage.success(row.enabled?'系统已启用':'系统已禁用') }
+    }
+    function openSystemDialog(isEdit) {
+      isSystemEdit.value=isEdit
+      if (!isEdit) Object.assign(systemForm,{ code:'', name:'', access_url:'', description:'' })
+      systemDialogVisible.value=true
+    }
+    function editSystem(row) {
+      isSystemEdit.value=true
+      Object.assign(systemForm, { code:row.code, name:row.name, access_url:row.access_url, description:row.description||'' })
+      systemDialogVisible.value=true
+    }
+    async function submitSystemForm() {
+      var vf = systemFormRef.value
+      if (!vf) return
+      try { await vf.validate() } catch(e) { return }
+      systemFormLoading.value=true
+      await new Promise(function(r){ setTimeout(r,300) })
+      if (isSystemEdit.value) {
+        var s = storeData.subsystems.find(function(x){ return x.code===systemForm.code })
+        if (s) { s.name=systemForm.name; s.access_url=systemForm.access_url; s.description=systemForm.description; saveStore(); _ElMessage.success('系统信息更新成功') }
+      } else {
+        if (storeData.subsystems.find(function(x){ return x.code===systemForm.code })) {
+          _ElMessage.error('系统编码已存在'); systemFormLoading.value=false; return
+        }
+        storeData.subsystems.push({ code:systemForm.code, name:systemForm.name, access_url:systemForm.access_url, description:systemForm.description, enabled:true })
+        saveStore()
+        _ElMessage.success('系统添加成功')
+      }
+      systemDialogVisible.value=false; systemFormLoading.value=false; fetchSystemList()
+    }
+    function deleteSystem(row) {
+      _ElMessageBox.confirm('确定要删除系统"'+row.name+'"吗？关联角色的该系统权限也将被移除。','删除系统',{
+        confirmButtonText:'确定删除', cancelButtonText:'取消', type:'warning'
+      }).then(function(){
+        var idx = storeData.subsystems.findIndex(function(s){ return s.code===row.code })
+        if (idx>=0) storeData.subsystems.splice(idx,1)
+        storeData.roles.forEach(function(r){
+          var sidx = (r.permissions?.subsystems||[]).indexOf(row.code)
+          if (sidx>=0) r.permissions.subsystems.splice(sidx,1)
+        })
+        saveStore()
+        if (selectedRoleId.value) {
+          var rr = storeData.roles.find(function(x){ return x.id===selectedRoleId.value })
+          if (rr) rolePermissions.value.subsystems = (rr.permissions?.subsystems||[]).slice()
+        }
+        fetchSystemList(); _ElMessage.success('系统已删除')
+      }).catch(function(){})
+    }
+
+    fetchUsers()
+    fetchSystemList()
+
+    return {
+      currentView:currentView, activeTab:activeTab, userInfo:userInfo, userName:userName, userInitial:userInitial,
+      loginForm:loginForm, loginFormRef:loginFormRef, loginLoading:loginLoading, loginRules:loginRules, handleLogin:handleLogin, demoLogin:demoLogin,
+      regForm:regForm, regFormRef:regFormRef, regLoading:regLoading, regRules:regRules, handleRegister:handleRegister,
+      handleLogout:handleLogout, handleMenuSelect:handleMenuSelect,
+      userTableData:userTableData, userLoading:userLoading, userKeyword:userKeyword, userRoleFilter:userRoleFilter, userFrozenFilter:userFrozenFilter, userDateRange:userDateRange,
+      userPage:userPage, userPageSize:userPageSize, userTotal:userTotal, roleList:roleList, debounceFetchUsers:debounceFetchUsers, fetchUsers:fetchUsers,
+      userDialogVisible:userDialogVisible, isUserEdit:isUserEdit, userFormRef:userFormRef, userCollapseActive:userCollapseActive, userForm:userForm, userFormRules:userFormRules,
+      openUserDialog:openUserDialog, editUser:editUser, submitUserForm:submitUserForm, resetUserPwd:resetUserPwd,
+      pwdDialogVisible:pwdDialogVisible, pwdFormRef:pwdFormRef, pwdForm:pwdForm, pwdRules:pwdRules, openChangePwdDialog:openChangePwdDialog, submitChangePwd:submitChangePwd,
+      roleSearchKey:roleSearchKey, filteredRoles:filteredRoles, selectedRoleId:selectedRoleId, selectedRole:selectedRole, roleDetailLoading:roleDetailLoading,
+      rolePermissions:rolePermissions, enabledSubsystemList:enabledSubsystemList, savingRole:savingRole,
+      selectRole:selectRole, saveRolePermissions:saveRolePermissions, openRoleCreateDialog:openRoleCreateDialog, editRoleInfo:editRoleInfo, deleteRole:deleteRole,
+      roleFormDialogVisible:roleFormDialogVisible, isRoleEdit:isRoleEdit, roleFormRef:roleFormRef, roleFormLoading:roleFormLoading, roleForm:roleForm, roleFormRules:roleFormRules, submitRoleForm:submitRoleForm,
+      systemTableData:systemTableData, systemKeyword:systemKeyword, systemEnabledFilter:systemEnabledFilter, fetchSystemList:fetchSystemList, toggleSystemEnabled:toggleSystemEnabled,
+      systemDialogVisible:systemDialogVisible, isSystemEdit:isSystemEdit, systemFormRef:systemFormRef, systemFormLoading:systemFormLoading, systemForm:systemForm, systemFormRules:systemFormRules,
+      openSystemDialog:openSystemDialog, editSystem:editSystem, submitSystemForm:submitSystemForm, deleteSystem:deleteSystem
+    }
+  }
+})
+
+// 注册图标
+for (var iconKey in ElementPlusIconsVue) {
+  if (ElementPlusIconsVue.hasOwnProperty(iconKey)) {
+    app.component(iconKey, ElementPlusIconsVue[iconKey])
+  }
+}
+
+// 注册 Element Plus（简化 locale，避免兼容性问题）
+app.use(ElementPlus)
+
+// 挂载
+app.mount('#app')
+
+// 成功，隐藏加载提示
+if (loadStatus) loadStatus.style.display = 'none'
+</script>
+
+</body>
+</html>

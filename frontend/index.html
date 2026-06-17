@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>统一用户管理系统</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.6.1/dist/index.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; }
+
+    .app-layout { display: flex; height: 100vh; overflow: hidden; }
+    .sidebar { width: 220px; background: linear-gradient(180deg, #1a3a5c 0%, #2c5282 100%); color: #fff; flex-shrink: 0; display: flex; flex-direction: column; }
+    .logo-area { padding: 16px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 16px; font-weight: 600; }
+    .logo-icon { width: 32px; height: 32px; background: #e53e3e; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; }
+    .main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .header { height: 56px; background: #fff; border-bottom: 1px solid #e8ecf0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .user-dropdown { cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .content-area { flex: 1; overflow: auto; padding: 20px; }
+    .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .login-card { width: 420px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; background: #fff; padding: 40px; }
+    .login-header { text-align: center; margin-bottom: 24px; }
+    .login-header h2 { font-size: 24px; color: #333; margin-bottom: 4px; }
+    .login-header p { font-size: 14px; color: #999; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 登录页 -->
+    <div v-if="currentView === 'login'" class="login-page">
+      <div class="login-card">
+        <div class="login-header">
+          <h2>统一用户管理系统</h2>
+          <p>请使用账号密码登录系统</p>
+        </div>
+        <el-form :model="loginForm" ref="loginFormRef" :rules="loginRules" label-position="top">
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="loginForm.username" placeholder="请输入用户名" size="large" @keyup.enter="handleLogin"/>
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" size="large" show-password @keyup.enter="handleLogin"/>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" size="large" style="width:100%" :loading="loginLoading" @click="handleLogin">登 录</el-button>
+          </el-form-item>
+          <div style="text-align:center;margin-top:12px">
+            <el-link type="primary" @click="currentView='register'">没有账号？立即注册</el-link>
+          </div>
+        </el-form>
+      </div>
+    </div>
+
+    <!-- 注册页 -->
+    <div v-else-if="currentView === 'register'" class="login-page">
+      <div class="login-card" style="width:460px">
+        <div class="login-header">
+          <h2>注册账号</h2>
+          <p>创建统一用户管理系统账号</p>
+        </div>
+        <el-form :model="regForm" ref="regFormRef" :rules="regRules" label-position="top" size="large">
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="regForm.username" placeholder="请输入用户名（2-20位）"/>
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="regForm.password" type="password" placeholder="至少6位密码" show-password/>
+          </el-form-item>
+          <el-form-item label="确认密码" prop="confirmPassword">
+            <el-input v-model="regForm.confirmPassword" type="password" placeholder="再次输入密码" show-password @keyup.enter="handleRegister"/>
+          </el-form-item>
+          <el-form-item label="邮箱（选填）" prop="email">
+            <el-input v-model="regForm.email" placeholder="请输入邮箱"/>
+          </el-form-item>
+          <el-form-item label="手机号（选填）">
+            <el-input v-model="regForm.phone" placeholder="请输入手机号"/>
+          </el-form-item>
+          <el-form-item label="真实姓名（选填）">
+            <el-input v-model="regForm.realName" placeholder="请输入姓名"/>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" style="width:100%" :loading="regLoading" @click="handleRegister">注 册</el-button>
+          </el-form-item>
+          <div style="text-align:center;margin-top:12px">
+            <el-link type="primary" @click="currentView='login'">已有账号？返回登录</el-link>
+          </div>
+        </el-form>
+      </div>
+    </div>
+
+    <!-- 主布局 -->
+    <div v-else class="app-layout">
+      <div class="sidebar">
+        <div class="logo-area">
+          <div class="logo-icon">●</div>
+          <span>统一用户管理系统</span>
+        </div>
+        <el-menu :default-active="activeTab" background-color="transparent" text-color="#a0b4d0" active-text-color="#fff"
+          style="border-right:none;padding-top:10px" @select="handleMenuSelect">
+          <el-menu-item index="users">
+            <el-icon><User /></el-icon><span>用户管理</span>
+          </el-menu-item>
+          <el-menu-item index="roles">
+            <el-icon><Avatar /></el-icon><span>角色管理</span>
+          </el-menu-item>
+        </el-menu>
+      </div>
+      <div class="main-container">
+        <div class="header">
+          <div style="font-size:16px;font-weight:600;color:#333">管理中心</div>
+          <div class="header-right">
+            <el-dropdown trigger="click" @command="handleLogout">
+              <div class="user-dropdown">
+                <el-avatar :size="32" style="background-color:#409eff">{{ userInitial }}</el-avatar>
+                <span>{{ userName }}</span>
+                <el-icon><ArrowDown /></el-icon>
+              </div>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="logout" style="color:#f56c6c">
+                    <el-icon><SwitchButton /></el-icon>退出登录
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+        <div class="content-area">
+          <!-- 用户管理 -->
+          <div v-if="activeTab==='users'">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+              <h2 style="font-size:20px;font-weight:600;color:#1a1a2e">子账户管理</h2>
+            </div>
+            <div style="background:#fff;border-radius:8px;padding:16px 20px;margin-bottom:16px">
+              <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+                <el-button type="primary" @click="openUserDialog(false)"><el-icon><Plus /></el-icon> 新建账号</el-button>
+              </div>
+              <el-row :gutter="12">
+                <el-col :span="6">
+                  <el-input v-model="userKeyword" placeholder="账号 / 名称" clearable @input="debounceFetchUsers" @clear="fetchUsers"/>
+                </el-col>
+                <el-col :span="4">
+                  <el-select v-model="userRoleFilter" placeholder="用户角色" clearable @change="fetchUsers" style="width:100%">
+                    <el-option label="全部" value=""/>
+                    <el-option v-for="r in roleList" :key="r.id" :label="r.name" :value="r.id"/>
+                  </el-select>
+                </el-col>
+                <el-col :span="4">
+                  <el-select v-model="userFrozenFilter" placeholder="冻结" clearable @change="fetchUsers" style="width:100%">
+                    <el-option label="否" value="0"/><el-option label="是" value="1"/>
+                  </el-select>
+                </el-col>
+                <el-col :span="6">
+                  <el-date-picker v-model="userDateRange" type="daterange" range-separator="至" start-placeholder="有效日期开始"
+                    end-placeholder="有效日期结束" value-format="YYYY-MM-DD" style="width:100%" @change="fetchUsers"/>
+                </el-col>
+              </el-row>
+            </div>
+            <div style="background:#fff;border-radius:8px;overflow:hidden">
+              <el-table :data="userTableData" stripe v-loading="userLoading">
+                <el-table-column prop="username" label="账号" width="120"/>
+                <el-table-column label="员工名称" width="130">
+                  <template #default="{row}">{{ row.real_name || '-' }}({{ row.username }})</template>
+                </el-table-column>
+                <el-table-column label="用户角色" width="140">
+                  <template #default="{row}">{{ (row.roleNames||[]).join('、') || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="email" label="邮箱" min-width="160"/>
+                <el-table-column prop="phone" label="手机号" width="140"/>
+                <el-table-column label="冻结状态" width="90" align="center">
+                  <template #default="{row}">
+                    <el-tag :type="row.locked===1?'danger':'success'" size="small" effect="light">{{ row.locked===1?'冻结':'正常' }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="valid_until" label="有效日期" width="120"/>
+                <el-table-column label="操作" width="80" fixed="right">
+                  <template #default="{row}"><el-link type="primary" @click="editUser(row)">编辑</el-link></template>
+                </el-table-column>
+              </el-table>
+              <div style="padding:14px 20px;display:flex;justify-content:flex-end">
+                <el-pagination v-model:current-page="userPage" v-model:page-size="userPageSize" :total="userTotal"
+                  layout="total,sizes,prev,pager,next,jumper" :page-sizes="[10,20,50]" @size-change="fetchUsers" @current-change="fetchUsers"/>
+              </div>
+            </div>
+
+            <!-- 用户编辑弹窗 -->
+            <el-dialog v-model="userDialogVisible" :title="isUserEdit?'账号编辑':'账号新建'" width="780px" destroy-on-close>
+              <el-form ref="userFormRef" :model="userForm" :rules="userFormRules" label-width="90px">
+                <el-collapse v-model="userCollapseActive">
+                  <el-collapse-item title="基本参数" name="basic">
+                    <el-row :gutter="20">
+                      <el-col :span="8">
+                        <el-form-item label="账号" prop="username">
+                          <el-input v-model="userForm.username" placeholder="请输入账号" :disabled="isUserEdit"/>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="用户类型">
+                          <el-input value="平台用户" disabled/>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="邮箱"><el-input v-model="userForm.email" placeholder="请输入邮箱"/></el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="20">
+                      <el-col :span="8">
+                        <el-form-item label="手机号码"><el-input v-model="userForm.phone" placeholder="请输入手机号"/></el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="员工名称"><el-input v-model="userForm.employeeId" placeholder="尚未设置"/></el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="* 名称" prop="realName">
+                          <el-input v-model="userForm.realName" placeholder="请输入名称"/>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="20">
+                      <el-col :span="8">
+                        <el-form-item label="* 有效日期">
+                          <el-date-picker v-model="userForm.validFrom" type="date" placeholder="请选择" value-format="YYYY-MM-DD" style="width:100%"/>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="有效日期至">
+                          <el-date-picker v-model="userForm.validUntil" type="date" placeholder="请选择" value-format="YYYY-MM-DD" style="width:100%"/>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="锁定">
+                          <el-radio-group v-model="userForm.locked">
+                            <el-radio :value="false">否</el-radio><el-radio :value="true">是</el-radio>
+                          </el-radio-group>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="20" v-if="!isUserEdit">
+                      <el-col :span="12">
+                        <el-form-item label="密码" prop="password">
+                          <el-input v-model="userForm.password" type="password" show-password placeholder="请输入密码（至少6位）"/>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                  </el-collapse-item>
+                  <el-collapse-item name="roles">
+                    <template #title><span style="color:#409eff;font-weight:500">分配角色</span></template>
+                    <div style="padding:10px 0">
+                      <el-checkbox-group v-model="userForm.roleIds">
+                        <div v-for="r in roleList" :key="r.id" style="display:inline-block;width:25%;margin-bottom:10px">
+                          <el-checkbox :label="r.id">{{ r.name }}</el-checkbox>
+                        </div>
+                      </el-checkbox-group>
+                      <div v-if="!roleList.length" style="color:#999">暂无角色</div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
+              </el-form>
+              <template #footer>
+                <div style="display:flex;justify-content:space-between;width:100%">
+                  <div>
+                    <el-button v-if="isUserEdit" type="warning" plain @click="resetUserPwd">重置密码</el-button>
+                    <el-button v-if="isUserEdit" type="info" plain @click="openChangePwdDialog">修改密码</el-button>
+                  </div>
+                  <div>
+                    <el-button @click="userDialogVisible=false">取消</el-button>
+                    <el-button type="primary" @click="submitUserForm">保存</el-button>
+                  </div>
+                </div>
+              </template>
+            </el-dialog>
+
+            <!-- 修改密码弹窗 -->
+            <el-dialog v-model="pwdDialogVisible" title="修改密码" width="420px" destroy-on-close>
+              <el-form :model="pwdForm" :rules="pwdRules" ref="pwdFormRef" label-width="90px">
+                <el-form-item label="新密码" prop="password">
+                  <el-input v-model="pwdForm.password" type="password" show-password placeholder="请输入新密码(至少6位)"/>
+                </el-form-item>
+              </el-form>
+              <template #footer>
+                <el-button @click="pwdDialogVisible=false">取消</el-button>
+                <el-button type="primary" @click="submitChangePwd">确定</el-button>
+              </template>
+            </el-dialog>
+          </div>
+
+          <!-- 角色管理 -->
+          <div v-if="activeTab==='roles'">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+              <h2 style="font-size:20px;font-weight:600">角色管理</h2>
+              <el-button type="primary" @click="createRole">创建</el-button>
+            </div>
+            <div style="display:flex;gap:16px;background:#fff;border-radius:8px;overflow:hidden">
+              <div style="width:360px;border-right:1px solid #eee;display:flex;flex-direction:column">
+                <div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+                  <el-input v-model="roleSearchKey" placeholder="编码/名称" clearable @input="filterRoles"/>
+                </div>
+                <div style="flex:1;overflow-y:auto">
+                  <div v-for="r in filteredRoles" :key="r.id"
+                    :style="{padding:'14px 20px',cursor:'pointer',borderBottom:'1px solid #f5f5f5',
+                      backgroundColor:selectedRoleId===r.id?'#e8f4fd':'',transition:'background-color .2s'}"
+                    @click="selectRole(r)">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <span :style="{fontWeight:500,color:selectedRoleId===r.id?'#409eff':'#333'}">{{ r.name }}</span>
+                      <el-tag type="success" size="small" effect="light">启用</el-tag>
+                    </div>
+                    <div style="font-size:12px;color:#999;margin-top:4px">{{ r.code }}</div>
+                  </div>
+                </div>
+              </div>
+              <div style="flex:1;padding:20px 24px" v-loading="roleDetailLoading">
+                <template v-if="selectedRole">
+                  <h3 style="font-size:18px;margin-bottom:4px">{{ selectedRole.name }}</h3>
+                  <p style="color:#999;font-size:13px;margin-bottom:24px">{{ selectedRole.description || '' }}</p>
+                  <div style="margin-bottom:28px">
+                    <h4 style="font-size:15px;font-weight:600;margin-bottom:12px">角色权限配置</h4>
+                    <el-checkbox-group v-model="rolePermissions.functions">
+                      <div style="margin-bottom:10px">
+                        <div style="padding-left:0;margin-top:6px">
+                          <el-checkbox label="user_manage">用户管理</el-checkbox>
+                          <el-checkbox label="role_manage" style="margin-left:20px">角色管理</el-checkbox>
+                        </div>
+                      </div>
+                    </el-checkbox-group>
+                  </div>
+                  <div>
+                    <el-checkbox v-model="showSubsystemConfig" style="margin-bottom:12px">系统配置</el-checkbox>
+                    <div v-if="showSubsystemConfig">
+                      <el-checkbox-group v-model="rolePermissions.subsystems">
+                        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+                          <el-checkbox v-for="s in subsystemList" :key="s.code" :label="s.code">浏览 {{ s.name }}系统</el-checkbox>
+                        </div>
+                      </el-checkbox-group>
+                      <el-input v-if="rolePermissions.subsystems.length>0" type="textarea" placeholder="可浏览的系统链接URL"
+                        :rows="3" style="margin-top:12px" disabled :model-value="getSubsystemUrls()"/>
+                    </div>
+                  </div>
+                  <div style="text-align:right;margin-top:32px">
+                    <el-button type="primary" @click="saveRolePermissions" :loading="savingRole">保存权限</el-button>
+                  </div>
+                </template>
+                <div v-else style="display:flex;align-items:center;justify-content:center;height:100%;color:#999">
+                  请选择一个角色查看/编辑权限
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 加载 Vue 3 + Element Plus CDN -->
+  <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/vue-router@4.3.0/dist/vue-router.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus@2.6.1/dist/index.full.min.js"></script>
+  <script src="https://unpkg.com/@element-plus/icons-vue@2.3.1/dist/index.iife.min.js"></script>
+  <script src="https://unpkg.com/axios@1.6.7/dist/axios.min.js"></script>
+
+  <script>
+    const { createApp, ref, reactive, computed, onMounted, watch, nextTick } = Vue
+    const { ElMessage, ElMessageBox } = ElementPlus
+
+    // Axios 请求封装
+    const request = axios.create({ baseURL: '/api', timeout: 15000 })
+    request.interceptors.request.use(config => {
+      const token = localStorage.getItem('token')
+      if (token) config.headers.Authorization = `Bearer ${token}`
+      return config
+    })
+    request.interceptors.response.use(r => r.data, err => {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('userInfo')
+        location.reload()
+      }
+      return Promise.reject(err)
+    })
+
+    const app = createApp({
+      setup() {
+        // === 公共状态 ===
+        const currentView = ref('login')
+        const activeTab = ref('users')
+        const userInfo = ref(JSON.parse(localStorage.getItem('userInfo') || 'null'))
+
+        const userName = computed(() => userInfo.value?.realName || userInfo.value?.username || '管理员')
+        const userInitial = computed(() => (userInfo.value?.realName || userInfo.value?.username || 'U').charAt(0))
+
+        // === 登录 ===
+        const loginForm = reactive({ username: '', password: '' })
+        const loginFormRef = ref(null)
+        const loginLoading = ref(false)
+        const loginRules = {
+          username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+          password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+        }
+
+        async function handleLogin() {
+          const valid = await loginFormRef.value?.validate().catch(() => false)
+          if (!valid) return
+          loginLoading.value = true
+          try {
+            const res = await request.post('/auth/login', { username: loginForm.username, password: loginForm.password })
+            if (res.code === 200) {
+              localStorage.setItem('token', res.data.token)
+              localStorage.setItem('userInfo', JSON.stringify(res.data.userInfo))
+              userInfo.value = res.data.userInfo
+              currentView.value = 'main'
+              fetchUsers()
+              fetchRoles()
+            } else {
+              ElMessage.error(res.message || '登录失败')
+            }
+          } catch(e) { ElMessage.error('网络错误') }
+          finally { loginLoading.value = false }
+        }
+
+        // === 注册 ===
+        const regForm = reactive({ username: '', password: '', confirmPassword: '', email: '', phone: '', realName: '' })
+        const regFormRef = ref(null)
+        const regLoading = ref(false)
+        const regRules = {
+          username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 2, max: 20, message: '2-20位', trigger: 'blur' }],
+          password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少6位', trigger: 'blur' }],
+          confirmPassword: [{ required: true, message: '请确认密码', trigger: 'blur' },
+            { validator: (r, v, cb) => v !== regForm.password ? cb(new Error('两次密码不一致')) : cb(), trigger: 'blur' }]
+        }
+
+        async function handleRegister() {
+          const valid = await regFormRef.value?.validate().catch(() => false)
+          if (!valid) return
+          regLoading.value = true
+          try {
+            const res = await request.post('/auth/register', regForm)
+            if (res.code === 200) {
+              ElMessage.success('注册成功，请登录')
+              currentView.value = 'login'
+            } else ElMessage.error(res.message || '注册失败')
+          } catch(e) { ElMessage.error('网络错误') }
+          finally { regLoading.value = false }
+        }
+
+        // === 退出 ===
+        function handleLogout(cmd) {
+          if (cmd !== 'logout') return
+          ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' }).then(() => {
+            localStorage.removeItem('token')
+            localStorage.removeItem('userInfo')
+            currentView.value = 'login'
+            ElMessage.success('已退出登录')
+          }).catch(() => {})
+        }
+
+        function handleMenuSelect(index) { activeTab.value = index }
+
+        // === 用户管理 ===
+        const userTableData = ref([])
+        const userLoading = ref(false)
+        const userKeyword = ref('')
+        const userRoleFilter = ref('')
+        const userFrozenFilter = ref('')
+        const userDateRange = ref(null)
+        const userPage = ref(1)
+        const userPageSize = ref(10)
+        const userTotal = ref(0)
+        const roleList = ref([])
+
+        let debounceTimer = null
+        function debounceFetchUsers() { clearTimeout(debounceTimer); debounceTimer = setTimeout(fetchUsers, 400) }
+
+        async function fetchUsers() {
+          userLoading.value = true
+          try {
+            const params = { page: userPage.value, pageSize: userPageSize.value, keyword: userKeyword.value || undefined,
+              roleId: userRoleFilter.value || undefined, frozen: userFrozenFilter.value || undefined }
+            if (userDateRange.value && userDateRange.value.length === 2) {
+              params.validFrom = userDateRange.value[0]; params.validUntil = userDateRange.value[1]
+            }
+            const res = await request.get('/users', { params })
+            if (res.code === 200) { userTableData.value = res.data.list; userTotal.value = res.data.total }
+          } finally { userLoading.value = false }
+        }
+
+        async function fetchRoles() {
+          const res = await request.get('/roles')
+          if (res.code === 200) roleList.value = res.data
+        }
+
+        // 用户表单
+        const userDialogVisible = ref(false)
+        const isUserEdit = ref(false)
+        const userFormRef = ref(null)
+        const userCollapseActive = ref(['basic', 'roles'])
+        const userForm = reactive({ id: null, username: '', password: '', email: '', phone: '', realName: '',
+          employeeId: '', userType: 'platform', validFrom: '', validUntil: '', locked: false, roleIds: [] })
+        const userFormRules = {
+          username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+          password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '至少6位', trigger: 'blur' }],
+          realName: [{ required: true, message: '请输入名称', trigger: 'blur' }]
+        }
+
+        function openUserDialog(isEdit) {
+          isUserEdit.value = isEdit
+          if (!isEdit) {
+            Object.assign(userForm, { id: null, username: '', password: '', email: '', phone: '', realName: '',
+              employeeId: '', userType: 'platform', validFrom: '', validUntil: '', locked: false, roleIds: [] })
+          }
+          userDialogVisible.value = true
+        }
+
+        async function editUser(row) {
+          const res = await request.get('/users/' + row.id)
+          if (res.code === 200) {
+            const d = res.data
+            Object.assign(userForm, { id: d.id, username: d.username, email: d.email || '', phone: d.phone || '',
+              realName: d.real_name || '', employeeId: d.employee_id || '', userType: d.user_type || 'platform',
+              validFrom: d.valid_from || '', validUntil: d.valid_until || '',
+              locked: d.locked === 1, roleIds: (d.roles || []).map(r => r.id) })
+            openUserDialog(true)
+          }
+        }
+
+        async function submitUserForm() {
+          const rulesToUse = isUserEdit.value ? {} : userFormRules
+          const valid = isUserEdit.value ? true : await userFormRef.value?.validate().catch(() => false)
+          if (!valid) return
+          const payload = { ...userForm, locked: userForm.locked ? 1 : 0 }
+          try {
+            let res
+            if (isUserEdit.value) { delete payload.password; res = await request.put('/users/' + payload.id, payload) }
+            else res = await request.post('/users', payload)
+            if (res.code === 200) { ElMessage.success(isUserEdit.value ? '更新成功' : '创建成功'); userDialogVisible.value = false; fetchUsers() }
+            else ElMessage.error(res.message)
+          } catch(e) { ElMessage.error('操作失败') }
+        }
+
+        async function resetUserPwd() {
+          try {
+            await ElMessageBox.confirm('确定要将该用户的密码重置为默认密码 123456 吗？', '重置密码', { type: 'warning' })
+            const res = await request.post('/users/' + userForm.id + '/reset-password')
+            if (res.code === 200) ElMessage.success('已重置为 123456'); else ElMessage.error(res.message)
+          } catch(e) {}
+        }
+
+        // 修改密码
+        const pwdDialogVisible = ref(false)
+        const pwdFormRef = ref(null)
+        const pwdForm = reactive({ password: '' })
+        const pwdRules = { password: [{ required: true, message: '请输入新密码', trigger: 'blur' }, { min: 6, message: '至少6位', trigger: 'blur' }] }
+        function openChangePwdDialog() { pwdForm.password = ''; pwdDialogVisible.value = true }
+        async function submitChangePwd() {
+          const valid = await pwdFormRef.value?.validate().catch(() => false)
+          if (!valid) return
+          const res = await request.put('/users/' + userForm.id + '/password', { newPassword: pwdForm.password })
+          if (res.code === 200) { ElMessage.success('密码修改成功'); pwdDialogVisible.value = false }
+          else ElMessage.error(res.message)
+        }
+
+        // === 角色管理 ===
+        const roleSearchKey = ref('')
+        const filteredRoles = computed(() => {
+          if (!roleSearchKey.value) return roleList.value
+          const k = roleSearchKey.value.toLowerCase()
+          return roleList.value.filter(r => r.name.includes(k) || r.code.includes(k))
+        })
+        const selectedRoleId = ref(null)
+        const selectedRole = ref(null)
+        const roleDetailLoading = ref(false)
+        const rolePermissions = ref({ functions: [], subsystems: [] })
+        const showSubsystemConfig = ref(false)
+        const subsystemList = ref([])
+        const savingRole = ref(false)
+
+        async function selectRole(role) {
+          if (selectedRoleId.value === role.id) return
+          selectedRoleId.value = role.id
+          roleDetailLoading.value = true
+          const res = await request.get('/roles/' + role.id)
+          if (res.code === 200) {
+            selectedRole.value = res.data
+            rolePermissions.value = { functions: res.data.permissions?.functions || [], subsystems: res.data.permissions?.subsystems || [] }
+            subsystemList.value = res.data.availableSubsystems || []
+            showSubsystemConfig.value = rolePermissions.value.subsystems.length > 0
+          }
+          roleDetailLoading.value = false
+        }
+
+        function getSubsystemUrls() {
+          return subsystemList.value.filter(s => rolePermissions.value.subsystems.includes(s.code))
+            .map(s => `${s.name}: ${s.access_url}`).join('\n')
+        }
+
+        async function saveRolePermissions() {
+          savingRole.value = true
+          try {
+            const permissions = [
+              ...rolePermissions.value.functions.map(code => ({ type: 'function', code })),
+              ...rolePermissions.value.subsystems.map(code => ({ type: 'subsystem', code }))
+            ]
+            const res = await request.put('/roles/' + selectedRole.value.id, {
+              name: selectedRole.value.name, code: selectedRole.value.code,
+              description: selectedRole.value.description, status: selectedRole.value.status, permissions
+            })
+            if (res.code === 200) ElMessage.success('保存成功'); else ElMessage.error(res.message || '保存失败')
+          } catch(e) { ElMessage.error('网络错误') }
+          finally { savingRole.value = false }
+        }
+
+        function createRole() {
+          ElMessageBox.prompt('请输入角色名称', '创建角色', {
+            confirmButtonText: '确定', cancelButtonText: '取消', inputPlaceholder: '角色名称',
+            inputValidator: val => !val ? '请输入角色名称' : true
+          }).then(async ({ value: name }) => {
+            const code = name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()
+            const res = await request.post('/roles', { name, code, permissions: [{ type: 'function', code: 'user_manage' }] })
+            if (res.code === 200) { ElMessage.success('创建成功'); fetchRoles() }
+          }).catch(() => {})
+        }
+
+        async function fetchSystems() {
+          const res = await request.get('/systems')
+          if (res.code === 200) subsystemList.value = res.data
+        }
+
+        // === 初始化 ===
+        const token = localStorage.getItem('token')
+        if (token) {
+          currentView.value = 'main'
+          fetchUsers()
+          fetchRoles()
+          fetchSystems()
+        }
+
+        return {
+          currentView, activeTab, userInfo, userName, userInitial,
+          loginForm, loginFormRef, loginLoading, loginRules, handleLogin,
+          regForm, regFormRef, regLoading, regRules, handleRegister,
+          handleLogout, handleMenuSelect,
+          userTableData, userLoading, userKeyword, userRoleFilter, userFrozenFilter, userDateRange,
+          userPage, userPageSize, userTotal, roleList, debounceFetchUsers, fetchUsers, fetchRoles,
+          userDialogVisible, isUserEdit, userFormRef, userCollapseActive, userForm, userFormRules,
+          openUserDialog, editUser, submitUserForm, resetUserPwd,
+          pwdDialogVisible, pwdFormRef, pwdForm, pwdRules, openChangePwdDialog, submitChangePwd,
+          roleSearchKey, filteredRoles, selectedRoleId, selectedRole, roleDetailLoading,
+          rolePermissions, showSubsystemConfig, subsystemList, savingRole,
+          selectRole, getSubsystemUrls, saveRolePermissions, createRole
+        }
+      }
+    })
+
+    // 注册 Element Plus 图标
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(key, component)
+    }
+
+    app.use(ElementPlus)
+    app.mount('#app')
+  </script>
+</body>
+</html>
